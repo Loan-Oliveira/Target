@@ -1,82 +1,88 @@
-program FaturamentoMedio;
-
-{$APPTYPE CONSOLE}
+program FaturamentoDistribuidora;
 
 uses
-  System.SysUtils,
-  System.Classes,
-  SuperObject;
+  System.SysUtils, System.Classes, System.JSON, System.Math;
 
-type
-  TDiaFaturamento = record
-    Dia: Integer;
-    Valor: Double;
+function CarregarJSON(const FileName: string): TJSONArray;
+var
+  JSONString: TStringList;
+  JSONObject: TJSONObject;
+begin
+  JSONString := TStringList.Create;
+  try
+    JSONString.LoadFromFile(FileName);
+    JSONObject := TJSONObject.ParseJSONValue(JSONString.Text) as TJSONObject;
+    Result := JSONObject.GetValue<TJSONArray>('faturamento');
+  finally
+    JSONString.Free;
   end;
+end;
+
+procedure CalcularFaturamento(const JSONData: TJSONArray);
+var
+  i, CountValidDays: Integer;
+  Menor, Maior, Soma, Media: Double;
+  DiasAcimaMedia: Integer;
+  DiaObj: TJSONObject;
+  Valor: Double;
+begin
+  Menor := MaxDouble;
+  Maior := -MaxDouble;
+  Soma := 0;
+  CountValidDays := 0;
+  DiasAcimaMedia := 0;
+
+  for i := 0 to JSONData.Count - 1 do
+  begin
+    DiaObj := JSONData.Items[i] as TJSONObject;
+    Valor := DiaObj.GetValue<Double>('valor'); // Obtem o valor
+
+    if Valor > 0 then
+    begin
+      if Valor < Menor then
+        Menor := Valor;
+      if Valor > Maior then
+        Maior := Valor;
+
+      Soma := Soma + Valor;
+      Inc(CountValidDays);
+    end;
+  end;
+
+  if CountValidDays > 0 then
+    Media := Soma / CountValidDays
+  else
+    Media := 0;
+
+  for i := 0 to JSONData.Count - 1 do
+  begin
+    DiaObj := JSONData.Items[i] as TJSONObject;
+    Valor := DiaObj.GetValue<Double>('valor');
+
+    if (Valor > 0) and (Valor > Media) then
+      Inc(DiasAcimaMedia);
+  end;
+
+  WriteLn(Format('Menor faturamento: %.2f', [Menor]));
+  WriteLn(Format('Maior faturamento: %.2f', [Maior]));
+  WriteLn(Format('Dias com faturamento acima da média: %d', [DiasAcimaMedia]));
+end;
 
 var
-  JSONData: ISuperObject;
-  JSONArray: TSuperArray;
-  Faturamento: array of TDiaFaturamento;
-  MenorValor, MaiorValor, SomaValores, MediaMensal: Double;
-  DiasComFaturamento, DiasAcimaDaMedia, I: Integer;
-
+  FaturamentoJSON: TJSONArray;
 begin
   try
-    // Carregar JSON do arquivo
-    JSONData := TSuperObject.ParseFile('faturamento.json', True);
-    if JSONData = nil then
-      raise Exception.Create('Erro ao carregar o arquivo JSON.');
-
-    JSONArray := JSONData.A['faturamento'];
-    SetLength(Faturamento, JSONArray.Length);
-
-    DiasComFaturamento := 0;
-    SomaValores := 0;
-
-    // Ler valores do JSON
-    for I := 0 to JSONArray.Length - 1 do
+    FaturamentoJSON := CarregarJSON('faturamento.json');
+    if Assigned(FaturamentoJSON) then
     begin
-      Faturamento[I].Dia := JSONArray.O[I].I['dia'];
-      Faturamento[I].Valor := JSONArray.O[I].D['valor'];
-
-      if Faturamento[I].Valor > 0 then
-      begin
-        if (DiasComFaturamento = 0) or (Faturamento[I].Valor < MenorValor) then
-          MenorValor := Faturamento[I].Valor;
-
-        if (DiasComFaturamento = 0) or (Faturamento[I].Valor > MaiorValor) then
-          MaiorValor := Faturamento[I].Valor;
-
-        SomaValores := SomaValores + Faturamento[I].Valor;
-        Inc(DiasComFaturamento);
-      end;
-    end;
-
-    if DiasComFaturamento = 0 then
-    begin
-      Writeln('Nenhum dia com faturamento registrado.');
-      Exit;
-    end;
-
-    // Calcular média mensal
-    MediaMensal := SomaValores / DiasComFaturamento;
-    DiasAcimaDaMedia := 0;
-
-    for I := 0 to High(Faturamento) do
-    begin
-      if (Faturamento[I].Valor > 0) and (Faturamento[I].Valor > MediaMensal) then
-        Inc(DiasAcimaDaMedia);
-    end;
-
-    // Exibir resultados
-    Writeln(Format('Menor valor de faturamento: %.2f', [MenorValor]));
-    Writeln(Format('Maior valor de faturamento: %.2f', [MaiorValor]));
-    Writeln(Format('Número de dias com faturamento acima da média: %d', [DiasAcimaDaMedia]));
-
+      CalcularFaturamento(FaturamentoJSON);
+    end
+    else
+      WriteLn('Erro ao carregar JSON.');
   except
     on E: Exception do
-      Writeln('Erro: ', E.Message);
+      WriteLn('Erro: ', E.Message);
   end;
 
-  Readln;
+  readln;
 end.
